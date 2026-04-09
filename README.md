@@ -2,9 +2,9 @@
 
 ## SBOM Workflows
 
-[![Agent SBOM from source code](https://github.com/nginxinc/compliance-rules/actions/workflows/sbom-src-agent.yml/badge.svg)](https://github.com/nginxinc/compliance-rules/actions/workflows/sbom-src-agent.yml)
-[![NGF SBOM from source code](https://github.com/nginxinc/compliance-rules/actions/workflows/sbom-src-ngf.yml/badge.svg)](https://github.com/nginxinc/compliance-rules/actions/workflows/sbom-src-ngf.yml)
-[![NIC SBOM from source code](https://github.com/nginxinc/compliance-rules/actions/workflows/sbom-src-nic.yml/badge.svg)](https://github.com/nginxinc/compliance-rules/actions/workflows/sbom-src-nic.yml)
+[![Agent SBOM from source code](https://github.com/nginx/compliance-rules/actions/workflows/sbom-src-agent.yml/badge.svg)](https://github.com/nginxinc/compliance-rules/actions/workflows/sbom-src-agent.yml)
+[![NGF SBOM from source code](https://github.com/nginx/compliance-rules/actions/workflows/sbom-src-ngf.yml/badge.svg)](https://github.com/nginxinc/compliance-rules/actions/workflows/sbom-src-ngf.yml)
+[![NIC SBOM from source code](https://github.com/nginx/compliance-rules/actions/workflows/sbom-src-nic.yml/badge.svg)](https://github.com/nginxinc/compliance-rules/actions/workflows/sbom-src-nic.yml)
 
 ---
 
