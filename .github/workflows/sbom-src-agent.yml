@@ -27,8 +27,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    env:
-      GOPROXY: "https://${{ secrets.ARTIFACTORY_USER }}:${{ secrets.ARTIFACTORY_TOKEN }}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-local-approved-dependency"
 
     steps:
     - name: Checkout repo
@@ -53,8 +51,6 @@ jobs:
         product-name: agent
         release-version: main
         checkout-path: agent
-        artifactory-user: ${{ secrets.ARTIFACTORY_USER }}
-        artifactory-token: ${{ secrets.ARTIFACTORY_TOKEN }}
+        az-vault-name: ${{ secrets.AZ_VAULT_SEC_NAME }}
         az-vault-client-id: ${{ secrets.AZ_VAULT_SEC_CLIENT_ID }}
         az-vault-tenant-id: ${{ secrets.AZ_VAULT_SEC_TENANT_ID }}
-        az-vault-subscription-id: ${{ secrets.AZ_VAULT_SEC_SUBSCRIPTION_ID }}
