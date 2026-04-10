@@ -24,26 +24,20 @@ inputs:
   az-vault-tenant-id:
     description: Azure vault tenant id for SEC vault
     required: true
+  az-vault-name:
+    description: Azure vault name
+    required: true
 
 runs:
   using: composite
   steps:
-    - name: Setup variables
-      id: vars
-      shell: bash
-      run: |
-        # NGINX SEC Container where we store generated SBOMs
-        echo "AZ_SEC_CONTAINER_NAME=cylon-indigo-generic-source-code-sbom" >> $GITHUB_OUTPUT
-        echo "AZ_SEC_CONTAINER_PATH=product" >> $GITHUB_OUTPUT
-        cat $GITHUB_OUTPUT
-
     - name: Get Secrets
       uses: nginx/ci-self-hosted/.github/actions/get-from-vault@refs/heads/main
       with:
           client-id: ${{ inputs.az-vault-client-id }}
           tenant-id: ${{ inputs.az-vault-tenant-id }}
-          vault-name: "nginx-sec-vault"
-          secret-names: "az-sec-storage-account, az-sec-client-id, az-sec-subscription-id, az-sec-tenant-id, artifactory-sec-api-token, artifactory-sec-user"
+          vault-name: ${{ inputs.az-vault-name }}
+          secret-names: "artifactory-url-go-approved, az-sec-container-name, az-sec-storage-account, az-sec-client-id, az-sec-subscription-id, az-sec-tenant-id, artifactory-sec-api-token, artifactory-sec-user"
 
     - name: Download Syft
       id: syft
@@ -62,7 +56,7 @@ runs:
         SYFT_ENRICH: "golang"
         SYFT_SOURCE_SUPPLIER: "F5 Networks"
         SYFT_GOLANG_MAIN_MODULE_VERSION_FROM_LD_FLAGS: "true"
-        SYFT_GOLANG_PROXY: "https://${{ env.ARTIFACTORY_SEC_USER }}:${{ env.ARTIFACTORY_SEC_API_TOKEN }}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-local-approved-dependency"
+        SYFT_GOLANG_PROXY: "https://${{ env.ARTIFACTORY_SEC_USER }}:${{ env.ARTIFACTORY_SEC_API_TOKEN }}@${{ env.ARTIFACTORY_URL_GO_APPROVED }}"
         SYFT_SOURCE_NAME: ${{ inputs.product-name }}
         SYFT_SOURCE_VERSION: ${{ inputs.release-version }}
         SYFT_SOURCE_FILE_DIGESTS: "SHA-256,SHA-512"
@@ -117,9 +111,9 @@ runs:
           for file in "${files[@]}"; do
           az storage blob upload --auth-mode=login \
             --account-name ${{ env.AZ_SEC_STORAGE_ACCOUNT }} \
-            --container-name ${{ steps.vars.outputs.AZ_SEC_CONTAINER_NAME }} \
+            --container-name ${{ env.AZ_SEC_CONTAINER_NAME }} \
             -f ./$file \
-            --overwrite -n ${{ steps.vars.outputs.AZ_SEC_CONTAINER_PATH }}/${{ inputs.product-name }}/${{ inputs.release-version }}/$file
+            --overwrite -n product/${{ inputs.product-name }}/${{ inputs.release-version }}/$file
           done
 
     - name: Azure logout

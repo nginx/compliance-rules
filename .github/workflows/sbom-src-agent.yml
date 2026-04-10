@@ -51,5 +51,6 @@ jobs:
         product-name: agent
         release-version: main
         checkout-path: agent
+        az-vault-name: ${{ secrets.AZ_VAULT_SEC_NAME }}
         az-vault-client-id: ${{ secrets.AZ_VAULT_SEC_CLIENT_ID }}
         az-vault-tenant-id: ${{ secrets.AZ_VAULT_SEC_TENANT_ID }}
