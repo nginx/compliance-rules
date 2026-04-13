@@ -24,77 +24,29 @@ inputs:
   az-vault-tenant-id:
     description: Azure tenant ID for SEC vault
     required: true
-  az-vault-subscription-id:
-    description: Azure vault subscription id
-    required: true
-  az-storage-account:
-    description: Azure storage account for SBOM documents
-    required: true
-  artifactory-user:
-    description: Artifactory user
-    required: true
-  artifactory-token:
-    description: Artifactory token
+  az-vault-name:
+    description: Azure vault name
     required: true
 
 runs:
   using: composite
   steps:
+    - name: Get Secrets
+      uses: nginx/ci-self-hosted/.github/actions/get-from-vault@refs/heads/main
+      with:
+          client-id: ${{ inputs.az-vault-client-id }}
+          tenant-id: ${{ inputs.az-vault-tenant-id }}
+          vault-name: ${{ inputs.az-vault-name }}
+          secret-names: "artifactory-url-go-approved, az-sec-container-name, az-sec-test-container-name, az-sec-storage-account, az-sec-client-id, az-sec-subscription-id, az-sec-tenant-id, artifactory-sec-api-token, artifactory-sec-user"
+
     - name: Setup variables
       id: vars
       shell: bash
       run: |
-        # Secrets to get from SEC Azure vault
-        echo "secrets-filter=az-storage-account,az-client-id,az-subscription-id,az-tenant-id" >> $GITHUB_OUTPUT
-
-        # NGINX SEC Azure vault name
-        echo "vault-sec=nginx-sec-vault" >> $GITHUB_OUTPUT
-
         # NGINX SEC Container where we store generated SBOMs
         echo "az-container-name=cylon-indigo-generic-release-sbom" >> $GITHUB_OUTPUT
         echo "az-container-path=poc/nginx-security-test" >> $GITHUB_OUTPUT
 
-    - name: Login to Azure Vault
-      uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
-      with:
-        client-id: ${{ inputs.az-vault-client-id }}
-        tenant-id: ${{ inputs.az-vault-tenant-id }}
-        subscription-id: ${{ inputs.az-vault-subscription-id }}
-
-    - name: Sync Azure Vault
-      shell: bash
-      run: |
-        IFS=',' read -r -a array <<< "${{ steps.vars.outputs.secrets-filter }}"
-          for pattern in "${array[@]}"; do
-            echo "Processing pattern: $pattern"
-            for secret_name in $(az keyvault secret list --vault-name "${{ steps.vars.outputs.vault-sec }}" --query "[?contains(name, '$pattern')].name" -o tsv); do
-              secret_value=$(az keyvault secret show --name "$secret_name" --vault-name "${{ steps.vars.outputs.vault-sec }}" --query value -o tsv)
-              # check if value is multiline
-              if [[ "$secret_value" == *$'\n'* ]]; then
-                # Mask each line for multiline secrets
-                while IFS= read -r line; do
-                [[ -n "$line" ]] && echo "::add-mask::${line}"
-                done <<< "$secret_value"
-
-                # Use heredoc syntax for multiline environment variables
-                delimiter="EOF_${secret_name}_$(date +%s)"
-                {
-                  echo "${secret_name}<<${delimiter}"
-                  echo "$secret_value"
-                  echo "$delimiter"
-                } >> $GITHUB_ENV
-              else
-                echo "::add-mask::${secret_value}"
-                echo "$secret_name=$secret_value" >> $GITHUB_ENV
-              fi
-              echo "Synced secret: env.$secret_name"
-            done
-          done
-
-    - name: Logout from Azure
-      shell: bash
-      run: |
-        az logout
 
     - name: Download Syft
       id: syft
@@ -117,7 +69,7 @@ runs:
         SYFT_ENRICH: "golang"
         SYFT_SOURCE_SUPPLIER: "F5 Networks"
         SYFT_GOLANG_MAIN_MODULE_VERSION_FROM_LD_FLAGS: "true"
-        SYFT_GOLANG_PROXY: "https://${{ inputs.artifactory-user }}:${{ inputs.artifactory-token }}@azr.artifactory.f5net.com/artifactory/api/go/f5-nginx-go-local-approved-dependency"
+        SYFT_GOLANG_PROXY: "https://${{ env.ARTIFACTORY_SEC_USER }}:${{ env.ARTIFACTORY_SEC_API_TOKEN }}@${{ env.ARTIFACTORY_URL_GO_APPROVED }}"
         SYFT_SOURCE_NAME: ${{ inputs.product-name }}
         SYFT_SOURCE_VERSION: ${{ inputs.release-version }}
         SYFT_SOURCE_FILE_DIGESTS: "SHA-256,SHA-512"
@@ -145,7 +97,9 @@ runs:
 
         # Create output var
         echo "sbomtar=${tarball_name}" >> $GITHUB_OUTPUT
-        echo $GITHUB_OUTPUT
+        echo "sbom_bundle=${bundle_file}" >> $GITHUB_OUTPUT
+        echo "sbom_doc=${sbomdoc}" >> $GITHUB_OUTPUT
+        echo "sbom_checksum=${checksum_file}" >> $GITHUB_OUTPUT
 
     - name: Store SBOM document in GitHub
       uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
@@ -157,21 +111,23 @@ runs:
     - name: Azure login
       uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
       with:
-        client-id: ${{ env.az-client-id }}
-        tenant-id: ${{ env.az-tenant-id }}
-        subscription-id: ${{ env.az-subscription-id }}
+        client-id: ${{ env.AZ_SEC_CLIENT_ID }}
+        tenant-id: ${{ env.AZ_SEC_TENANT_ID }}
+        subscription-id: ${{ env.AZ_SEC_SUBSCRIPTION_ID }}
 
     - name: Upload SBOM document to Azure
       uses: azure/CLI@9f7ce6f37c31b777ec6c6b6d1dfe7db79f497956 # v2.2.0
       with:
         inlineScript: |
           echo -n "Uploading SBOM file ${{ steps.sbom.outputs.sbomtar }} to Azure storage"
+          files=(${{ steps.sign.outputs.sbom_bundle}} ${{ steps.sign.outputs.sbom_doc}} ${{ steps.sign.outputs.sbom_checksum}})
+          for file in "${files[@]}"; do
           az storage blob upload --auth-mode=login \
-            --account-name ${{ env.az-storage-account }} \
-            --container-name ${{ steps.vars.outputs.az-container-name }} \
-            -f ./${{ steps.sign.outputs.sbomtar }} \
-            --overwrite -n ${{ steps.vars.outputs.az-container-path }}/${{ inputs.product-name }}/${{ inputs.release-version }}/${{ steps.sign.outputs.sbomtar }}
-
+            --account-name ${{ env.AZ_SEC_STORAGE_ACCOUNT }} \
+            --container-name ${{ env.AZ_SEC_TEST_CONTAINER_NAME }} \
+            -f ./$file \
+            --overwrite -n poc/nginx-security-test/${{ inputs.product-name }}/${{ inputs.release-version }}/${{ steps.sign.outputs.sbomtar }}
+          done
     - name: Azure logout
       shell: bash
       run: |
