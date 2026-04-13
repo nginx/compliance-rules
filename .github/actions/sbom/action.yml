@@ -37,7 +37,7 @@ runs:
           client-id: ${{ inputs.az-vault-client-id }}
           tenant-id: ${{ inputs.az-vault-tenant-id }}
           vault-name: ${{ inputs.az-vault-name }}
-          secret-names: "artifactory-url-go-approved, az-sec-container-name, az-sec-storage-account, az-sec-client-id, az-sec-subscription-id, az-sec-tenant-id, artifactory-sec-api-token, artifactory-sec-user"
+          secret-names: "artifactory-url-go-approved, az-sec-container-name, az-sec-test-container-name, az-sec-storage-account, az-sec-client-id, az-sec-subscription-id, az-sec-tenant-id, artifactory-sec-api-token, artifactory-sec-user"
 
     - name: Setup variables
       id: vars
@@ -124,7 +124,7 @@ runs:
           for file in "${files[@]}"; do
           az storage blob upload --auth-mode=login \
             --account-name ${{ env.AZ_SEC_STORAGE_ACCOUNT }} \
-            --container-name ${{ env.AZ_SEC_CONTAINER_NAME }} \
+            --container-name ${{ env.AZ_SEC_TEST_CONTAINER_NAME }} \
             -f ./$file \
             --overwrite -n poc/nginx-security-test/${{ inputs.product-name }}/${{ inputs.release-version }}/${{ steps.sign.outputs.sbomtar }}
           done
