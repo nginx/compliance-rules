@@ -39,15 +39,6 @@ runs:
           vault-name: ${{ inputs.az-vault-name }}
           secret-names: "artifactory-url-go-approved, az-sec-container-name, az-sec-test-container-name, az-sec-storage-account, az-sec-client-id, az-sec-subscription-id, az-sec-tenant-id, artifactory-sec-api-token, artifactory-sec-user"
 
-    - name: Setup variables
-      id: vars
-      shell: bash
-      run: |
-        # NGINX SEC Container where we store generated SBOMs
-        echo "az-container-name=cylon-indigo-generic-release-sbom" >> $GITHUB_OUTPUT
-        echo "az-container-path=poc/nginx-security-test" >> $GITHUB_OUTPUT
-
-
     - name: Download Syft
       id: syft
       uses: anchore/sbom-action/download-syft@57aae528053a48a3f6235f2d9461b05fbcb7366d # v0.23.1
