@@ -64,6 +64,25 @@ runs:
         SYFT_SOURCE_VERSION: ${{ inputs.release-version }}
         SYFT_SOURCE_FILE_DIGESTS: "SHA-256,SHA-512"
 
+    - name: Scan SBOM and create SARIF vulnerability report
+      id: scan
+      uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2 # v7.4.0
+      with:
+        sbom: "${{ steps.sbom.outputs.sbom-doc-bin }}"
+        only-fixed: true
+        fail-build: false
+        add-cpes-if-none: true
+        severity-cutoff: critical
+        output-format: sarif
+        output-file: sbom-bin-${{ inputs.product-name }}.sarif.json
+
+    - name: Inspect SARIF report
+      id: sarif
+      run: |
+        echo "sbom-cves=sbom-bin-${{ inputs.product-name }}.sarif.json" >> $GITHUB_OUTPUT
+        cat $GITHUB_OUTPUT
+      shell: bash
+
     - name: Install Cosign
       uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
 
@@ -91,6 +110,30 @@ runs:
         echo "sbom_doc=${sbomdoc}" >> $GITHUB_OUTPUT
         echo "sbom_checksum=${checksum_file}" >> $GITHUB_OUTPUT
 
+    - name: Generate checksum and sign SARIF file
+      id: sign-sarif
+      shell: bash
+      run: |
+        cosign_binary=${COSIGN_BIN:-"cosign"}
+
+        sarifdoc=$(basename "sbom-bin-${{ inputs.product-name }}.sarif.json")
+        sha256sum "${sarifdoc}" >> "${sarifdoc}_checksum.txt"
+        checksum_file=${sarifdoc}_checksum.txt
+        bundle_file="bundle-${{ steps.sarif.outputs.sbom-cves }}"
+
+        # Sign
+        ${cosign_binary} sign-blob "${sarifdoc}" --bundle="${bundle_file}" --output-signature="${checksum_file}.sig" --output-certificate="${checksum_file}.pem" -y
+
+        # Create tarball
+        tarball_name="${{ inputs.product-name }}_${{ inputs.release-version }}_sarif_src.tar.gz"
+        tar -czf "${tarball_name}" "${sarifdoc}" "${checksum_file}" "${bundle_file}"
+
+        # Create output var
+        echo "sariftar=${tarball_name}" >> $GITHUB_OUTPUT
+        echo "sarif_bundle=${bundle_file}" >> $GITHUB_OUTPUT
+        echo "sarif_doc=${sarifdoc}" >> $GITHUB_OUTPUT
+        echo "sarif_checksum=${checksum_file}" >> $GITHUB_OUTPUT
+
     - name: Store SBOM document in GitHub
       uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
       with:
@@ -117,6 +160,20 @@ runs:
             --container-name ${{ env.AZ_SEC_TEST_CONTAINER_NAME }} \
             -f ./$file \
             --overwrite -n poc/nginx-security-test/${{ inputs.product-name }}/${{ inputs.release-version }}/${{ steps.sign.outputs.sbomtar }}
+          done
+
+    - name: Upload SARIF document to Azure SEC storage
+      uses: azure/CLI@9f7ce6f37c31b777ec6c6b6d1dfe7db79f497956 # v2.2.0
+      with:
+        inlineScript: |
+          echo "Uploading SARIF report to Azure storage"
+          files=(${{ steps.sign-sarif.outputs.sarif_bundle}} ${{ steps.sign-sarif.outputs.sarif_doc}} ${{ steps.sign-sarif.outputs.sarif_checksum}})
+          for file in "${files[@]}"; do
+          az storage blob upload --auth-mode=login \
+            --account-name ${{ env.AZ_SEC_STORAGE_ACCOUNT }} \
+            --container-name ${{ env.AZ_SEC_TEST_CONTAINER_NAME }} \
+            -f ./$file \
+            --overwrite -n poc/nginx-security-test/${{ inputs.product-name }}/${{ inputs.release-version }}/$file
           done
 
     - name: Azure logout
