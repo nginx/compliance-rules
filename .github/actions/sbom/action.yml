@@ -6,7 +6,7 @@ inputs:
     description: A binary to generate SBOM
     required: true
   product-name:
-    description: Name of the product, for example 'agent', 'nic'
+    description: Name of the product, for example 'agent', 'nic' or 'ngf'
     required: true
   ref:
     description: The branch, tag or SHA to checkout
@@ -51,7 +51,6 @@ runs:
 
         # Scan binary and generate SBOM doc
         syft scan file:"${binaryname}" -o spdx-json > "${binaryname}.bin.spdx.json"
-
         echo "binary=${binaryname}" >> $GITHUB_OUTPUT
         echo "sbom-doc-bin=${binaryname}.bin.spdx.json" >> $GITHUB_OUTPUT
         cat $GITHUB_OUTPUT
@@ -77,7 +76,7 @@ runs:
         sbomdoc=$(basename "${{ steps.sbom.outputs.sbom-doc-bin }}")
         sha256sum "${sbomdoc}" >> "${sbomdoc}_checksum.txt"
         checksum_file=${sbomdoc}_checksum.txt
-        bundle_file="${{ steps.sbom.outputs.sbom-doc-bin }}.bundle.json"
+        bundle_file="bundle-${{ steps.sbom.outputs.sbom-doc-bin }}"
 
         # Sign
         ${cosign_binary} sign-blob "${sbomdoc}" --bundle="${bundle_file}" --output-signature="${checksum_file}.sig" --output-certificate="${checksum_file}.pem" -y
@@ -119,6 +118,7 @@ runs:
             -f ./$file \
             --overwrite -n poc/nginx-security-test/${{ inputs.product-name }}/${{ inputs.release-version }}/${{ steps.sign.outputs.sbomtar }}
           done
+
     - name: Azure logout
       shell: bash
       run: |
