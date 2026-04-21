@@ -1,0 +1,96 @@
+name: "SAST"
+
+on:
+  workflow_call:
+    inputs:
+      requested_languages:
+        description: 'Comma-separated list of requested languages'
+        type: string
+        required: true
+
+jobs:
+  detect-languages:
+    if: ${{ ( github.repository_owner == 'nginx' || github.repository_owner == 'nginxinc' ) }}
+    runs-on: ubuntu-24.04
+    outputs:
+      matched_matrix: ${{ steps.set-matrix.outputs.matched_matrix }}
+      should_scan: ${{ steps.set-matrix.outputs.should_scan }}
+    steps:
+      - name: Requested languages
+        id: set-matrix
+        run: |          
+          IFS=',' read -r -a raw_requested <<< "${{ inputs.requested_languages }}"
+
+          requested=()
+          for lang in "${raw_requested[@]}"; do
+            trimmed=$(echo "$lang" | xargs)  # xargs trims leading/trailing spaces
+            requested+=("$trimmed")
+          done
+
+          if [[ ${#requested[@]} -eq 0 ]]; then
+            echo "No requested languages provided. Exiting."
+            exit 1
+          fi
+          
+          matrix_json=$(printf '%s\n' "${requested[@]}" | jq -R . | jq -s '{language: .}')
+          escaped_json=$(echo "$matrix_json" | jq -c .)
+
+          if [ -n "$escaped_json" ] && [ "$escaped_json" != '{"language":[]}' ]; then
+            echo "should_scan=true" >> $GITHUB_OUTPUT
+            echo "matched_matrix=$escaped_json" >> $GITHUB_OUTPUT
+          else
+            echo "No matching languages found."
+            echo "should_scan=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Print matched languages summary
+        if: steps.set-matrix.outputs.should_scan == 'true'
+        run: |
+            echo "Matched languages: ${{ steps.set-matrix.outputs.matched_matrix }}"
+            echo "Scanning will run only for these languages."
+      
+      - name: Validate matched_matrix JSON format
+        if: steps.set-matrix.outputs.should_scan == 'true'
+        run: |
+          echo '${{ steps.set-matrix.outputs.matched_matrix }}' | jq .
+
+          
+  analyze:
+    needs: detect-languages
+    if: ${{ needs.detect-languages.outputs.should_scan == 'true' && (github.repository_owner == 'nginx' || github.repository_owner == 'nginxinc') }}
+    name: Analyze (${{ matrix.language }})
+    permissions:
+      packages: read
+      actions: read # for github/codeql-action/init to get workflow details
+      contents: read # for actions/checkout to fetch code
+      security-events: write # for github/codeql-action/autobuild to send a status report
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.detect-languages.outputs.matched_matrix) }}
+    runs-on: ubuntu-24.04
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Initializes the CodeQL tools for scanning.
+      - name: Initialize CodeQL      
+        uses: github/codeql-action/init@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+    
+      - name: Setup Go Environment
+        uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: go.mod
+        if: matrix.language == 'go'
+
+      - name: Autobuild
+        uses: github/codeql-action/init@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/init@4e94bd11f71e507f7f87df81788dff88d1dacbfb # v4.31.0
+        with:
+          languages: "${{ matrix.language }}"

@@ -1,0 +1,147 @@
+name: SCA
+
+on:
+  workflow_call:
+    secrets:
+      WS_URL:
+        required: true
+      WS_APIKEY_NGINX:
+        required: true
+      WS_USER_KEY:
+        required: true
+      WS_COMPLIANCE_THRESHOLD:
+        required: true
+    inputs:
+      product_name:
+        type: string
+        required: true        
+      project_name:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  scan:
+    if: ${{ ( github.repository_owner == 'nginx' || github.repository_owner == 'nginxinc' ) }}
+    name: Mend
+    runs-on: ubuntu-24.04
+    outputs:
+      mend-report-file: ${{ steps.report.outputs.mend-report-file }}
+      mend-scan-result: ${{ steps.scan.outputs.mend-scan-result }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download agent
+        run: curl -fsSLJO https://github.com/whitesource/unified-agent-distribution/releases/latest/download/wss-unified-agent.jar
+
+      - name: Verify JAR
+        run: jarsigner -verify wss-unified-agent.jar
+
+      - name: Scan and upload
+        id: scan
+        continue-on-error: true
+        env:
+          WS_URL: ${{ secrets.WS_URL }}
+          WS_APIKEY_NGINX: ${{ secrets.WS_APIKEY_NGINX }}
+          WS_USER_KEY: ${{ secrets.WS_USER_KEY }}
+          PRODUCT_NAME: ${{ inputs.product_name}}
+          PROJECT_NAME: ${{ inputs.project_name}}
+          WS_CHECKPOLICIES: true
+          WS_FORCECHECKALLDEPENDENCIES: true
+          WS_GENERATESCANREPORT: true
+          WS_FORCEUPDATE: true
+          WS_FORCEUPDATE_FAILBUILDONPOLICYVIOLATION: true
+          
+        run: |
+          if [ -z "$WS_URL" ] || -z "$WS_APIKEY_NGINX" ] || [ -z "$WS_USER_KEY" ]; then
+            echo "Secret is empty"
+            exit 1            
+          fi
+
+          if [ -z "$PRODUCT_NAME" ] || [ -z "$PROJECT_NAME" ]; then
+            echo "Project Name is empty"
+            exit 1
+          fi
+
+          java -jar wss-unified-agent.jar -noConfig true -wss.url $WS_URL -apiKey $WS_APIKEY_NGINX -userKey $WS_USER_KEY -product $PRODUCT_NAME -project $PROJECT_NAME -d ./
+          exit_code=$?
+
+          echo "mend-scan-result=$(echo $exit_code)" >> $GITHUB_OUTPUT
+          echo -e "\nExit Code is: $exit_code\n"         
+
+      - name: Check if report is generated
+        if: success() || steps.scan.conclusion == 'failure'
+        id: report
+        run: |
+          echo "mend-report-file=$(find whitesource -type f -name "${PROJECT_NAME}*scan_report.json" | head -n 1)" >> $GITHUB_OUTPUT
+          cat $GITHUB_OUTPUT
+
+      - name: Print scan report
+        if: success() || steps.scan.conclusion == 'failure'
+        id: print
+        run: |
+          cat ${{ steps.report.outputs.mend-report-file }} | jq .
+
+      - name: Check for rejected policies
+        if: success() || steps.scan.conclusion == 'failure'
+        id: rejected
+        run: |
+          file=${{ steps.report.outputs.mend_report_file }}
+
+          if [[ -n "$file" ]]; then
+            echo -e "\nParsing Mend scan report file - $file\n"
+            result=$(jq -c ".libraries[] | select (.policyDetails.status == \"Reject\")" "$file")
+
+            # Check for rejected policies
+            if [[ -z "$result" ]]; then
+              echo "Currently there are no rejected libraries found"
+              exit 0
+            fi
+
+            # Checking Compliance Threshold
+            echo -e "\nWS_COMPLIANCE_THRESHOLD = ${{ secrets.WS_COMPLIANCE_THRESHOLD }}\n"
+
+            vulnerabilities=$(echo "$result" | jq -r ".vulnerabilities[] | select(.score >= ${{ secrets.WS_COMPLIANCE_THRESHOLD }})")
+            if [[ -z "$vulnerabilities" ]]; then
+              echo "Mend has not detected any vulnerable libraries with score >= ${{ secrets.WS_COMPLIANCE_THRESHOLD }}"
+            fi
+
+            empty_fix=$(echo "$vulnerabilities" | jq -c 'select(.topFix == null or .topFix == {})')
+            if [[ -n "$empty_fix" ]]; then
+              echo "The vulnerabilities that are currently identified does not have any fixes available."
+              echo "$empty_fix" | jq -r '.name'
+              echo "Allow the job to proceed with exit_code=0"
+              exit 0
+            else
+              echo "The reported  vulnerabilities has the fixes available. Breaking the pipeline as per compliance"
+              echo "$vulnerabilities" | jq -r '.name'
+            fi
+          else
+            echo "Unable to locate the mend scan report file. No parsing performed"
+          fi
+
+      - name: Store mend report
+        if: success() || steps.scan.conclusion == 'failure'
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: mend-scan-report
+          path: whitesource
+          retention-days: 1
+
+      - name: Final scan result
+        if: ${{ steps.scan.outcome == 'failure' }} 
+        run: |
+          printf "\nSCA scan detected vulnerabilities.\n"
+          exit 1
+
+      - name: Final scan result
+        if: ${{ steps.scan.outcome == 'success' }} 
+        run: |          
+          exit 0
