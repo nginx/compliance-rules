@@ -2,8 +2,8 @@ name: NIC SBOM from source code
 
 on:
   # =========
-  schedule:
-    - cron: '0 2 * * *'  # Runs daily at 2:00 AM UTC
+  #schedule:
+  #  - cron: '0 2 * * *'  # Runs daily at 2:00 AM UTC
   # =========
   workflow_dispatch:
     inputs:
