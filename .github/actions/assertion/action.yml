@@ -51,5 +51,5 @@ outputs:
   assertion-document-path:
     description: "Generated assertion document"
 runs:
-  using: node20
+  using: node24
   main: invoke_binary.js
