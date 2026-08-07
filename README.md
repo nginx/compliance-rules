@@ -22,6 +22,10 @@ This repository provides common GitHub Actions and GitHub workflows for code sca
 
 ## Configure Mend workflow in a GitHub repository
 
+Note Mend is deprecated. Please migrate to Semgrep.
+
+For now the workflow interface stays unchanged. Parameters are optional. The job will only print out depreciation warning.
+
 - Create `mend.yml` workflow in your project repository
 
 ```yaml
@@ -38,7 +42,7 @@ on:
     inputs:
       branch:
         type: string
-        required: false
+        required: true
         default: main
   workflow_call:
     inputs:
@@ -71,7 +75,7 @@ product_name: <caller_product_name>_${{ github.head_ref || github.ref_name }}
 project_name: <caller_project_name>
 ```
 
-### Mend workflow
+### Mend workflow - DEPRECIATED. DON'T USE.
 
 1. GitHub triggers the mend workflow defined in a project repository (for example `ProjectABC`)
 1. Mend job references mend rules (main `mend.yml`) defined in the workflow in this repository.
