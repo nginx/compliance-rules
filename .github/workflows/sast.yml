@@ -75,8 +75,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Initializes the CodeQL tools for scanning.
-      - name: Initialize CodeQL      
-        #uses: github/codeql-action/init@416ff0dea110f80f0f56f0046500dbf7420e4bb0 # v2.27.1 CodeQL Bundle
+      - name: Initialize CodeQL
         uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           languages: ${{ matrix.language }}
@@ -93,11 +92,3 @@ jobs:
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
-
-      # - name: Autobuild
-      #   uses: github/codeql-action/autobuild@ff0a06e83cb2de871e5a09832bc6a81e7276941f # v3.28.18
-
-      # - name: Perform CodeQL Analysis
-      #   uses: github/codeql-action/analyze@60168efe1c415ce0f5521ea06d5c2062adbeed1b # v3.28.17
-      #   with:
-      #     category: "/language:${{matrix.language}}"
