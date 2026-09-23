@@ -87,8 +87,8 @@ jobs:
           go-version-file: go.mod
         if: matrix.language == 'go'
 
-      - name: Autobuild
-        uses: github/codeql-action/init@416ff0dea110f80f0f56f0046500dbf7420e4bb0 # v2.27.1 CodeQL Bundle
+      # - name: Autobuild
+      #   uses: github/codeql-action/init@416ff0dea110f80f0f56f0046500dbf7420e4bb0 # v2.27.1 CodeQL Bundle
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/init@416ff0dea110f80f0f56f0046500dbf7420e4bb0 # v2.27.1 CodeQL Bundle
